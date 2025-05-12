@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MedlinePlus Genetics Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
+        h1 { color: #333; }
+        h2 { color: #333; }
+        .record { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .section { margin-bottom: 10px; }
+        .section-title { font-weight: bold; margin-top: 10px; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        ul { padding-left: 20px; }
+    </style>
+</head>
+<body>
+
+    <a id="top"></a>
+    <h1>Select your XML file:</h1>
+    <input type="file" id="fileInput" />
+    <div id="output"></div>
+    
+    <script>
+    function makeId(text) {
+        return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    }
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(event.target.result, "application/xml");
+            displayRecords(xmlDoc);
+        };
+        reader.readAsText(file);
+    });
+
+    function displayRecords(xmlDoc) {
+        const output = document.getElementById('output');
+        output.innerHTML = '';
+
+        xmlDoc.querySelectorAll('health-condition-summary').forEach(condition => {
+            const div = document.createElement('div');
+            div.className = 'record';
+            div.id = makeId(condition.querySelector('name')?.textContent);
+            const recordId = condition.getAttribute('id');
+
+            div.innerHTML = `
+                <h2>Health Condition: ${condition.querySelector('name')?.textContent}</h2>
+                <div class="section"><strong>Record ID:</strong> ${recordId}</div>
+                <div class="section">${extractTexts(condition)}</div>
+                <div class="section"><span class="section-title">Synonyms:</span> ${extractSynonyms(condition)}</div>
+                <div class="section"><span class="section-title">Inheritance Patterns:</span> ${extractList(condition, 'inheritance-pattern > memo')}</div>
+                <div class="section"><span class="section-title">Related Chromosomes:</span> ${extractRelatedChromosomes(condition)}</div>
+                <div class="section"><span class="section-title">DB Keys:</span> ${extractDBKeys(condition)}</div>
+                <div class="section"><a href="#top">Back to Top</a></div>
+            `;
+            output.appendChild(div);
+        });
+
+        xmlDoc.querySelectorAll('gene-summary').forEach(gene => {
+            const div = document.createElement('div');
+            div.className = 'record';
+            div.id = makeId(gene.querySelector('gene-symbol')?.textContent);
+            const recordId = gene.getAttribute('id');
+
+            div.innerHTML = `
+                <h2>Gene: ${gene.querySelector('gene-symbol')?.textContent}</h2>
+                <div class="section"><strong>Record ID:</strong> ${recordId}</div>
+                <div class="section">${extractTexts(gene)}</div>
+                <div class="section"><span class="section-title">Synonyms:</span> ${extractSynonyms(gene)}</div>
+                <div class="section"><span class="section-title">Related Conditions:</span> ${extractRelatedConditions(gene)}</div>
+                <div class="section"><span class="section-title">DB Keys:</span> ${extractDBKeys(gene)}</div>
+                <div class="section"><a href="#top">Back to Top</a></div>
+            `;
+            output.appendChild(div);
+        });
+
+        xmlDoc.querySelectorAll('chromosome-summary').forEach(chromosome => {
+            const div = document.createElement('div');
+            div.className = 'record';
+            div.id = makeId(chromosome.querySelector('name')?.textContent);
+            const recordId = chromosome.getAttribute('id');
+
+            div.innerHTML = `
+                <h2>Chromosome: ${chromosome.querySelector('name')?.textContent}</h2>
+                <div class="section"><strong>Record ID:</strong> ${recordId}</div>
+                <div class="section">${extractTexts(chromosome)}</div>
+                <div class="section"><span class="section-title">Related Conditions:</span> ${extractRelatedConditions(chromosome)}</div>
+                <div class="section"><span class="section-title">DB Keys:</span> ${extractDBKeys(chromosome)}</div>
+                <div class="section"><a href="#top">Back to Top</a></div>
+            `;
+            output.appendChild(div);
+        });
+    }
+
+    function extractTexts(parent) {
+        const texts = parent.querySelectorAll('text-list text html');
+        return Array.from(texts).map(html => {
+            return Array.from(html.children).map(p => `<p>${p.textContent}</p>`).join('');
+        }).join('');
+    }
+
+    function extractSynonyms(parent) {
+        const items = parent.querySelectorAll('synonym');
+        if (!items.length) return 'None';
+        return `<ul>${Array.from(items).map(item => {
+            const term = item.textContent;
+            const url = `https://uts.nlm.nih.gov/uts/umls/searchResults?searchString=${encodeURIComponent(term)}`;
+            return `<li><a href="${url}" target="_blank">${term}</a></li>`;
+        }).join('')}</ul>`;
+    }
+
+    function extractList(parent, selector) {
+        const items = parent.querySelectorAll(selector);
+        if (!items.length) return 'None';
+        return `<ul>${Array.from(items).map(i => `<li>${i.textContent}</li>`).join('')}</ul>`;
+    }
+
+    function extractRelatedConditions(parent) {
+        const items = parent.querySelectorAll('related-health-condition');
+        if (!items.length) return 'None';
+        return `<ul>${Array.from(items).map(cond => {
+            const name = cond.querySelector('name')?.textContent;
+            const id = makeId(name);
+            return `<li><a href="#${id}">${name}</a></li>`;
+        }).join('')}</ul>`;
+    }
+
+    function extractRelatedChromosomes(parent) {
+        const items = parent.querySelectorAll('related-chromosome');
+        if (!items.length) return 'None';
+        return `<ul>${Array.from(items).map(chromo => {
+            const name = chromo.querySelector('name')?.textContent;
+            const id = makeId(name);
+            return `<li><a href="#${id}">${name}</a></li>`;
+        }).join('')}</ul>`;
+    }
+
+    function extractDBKeys(parent) {
+        const items = parent.querySelectorAll('db-key');
+        if (!items.length) return 'None';
+
+        const sabMap = {
+            "SNOMED CT": "SNOMEDCT_US",
+            "OMIM": "OMIM",
+            "MeSH": "MSH"
+        };
+
+        return `<ul>${Array.from(items).map(key => {
+            const db = key.querySelector('db')?.textContent;
+            const code = key.querySelector('key')?.textContent;
+            let url = '';
+
+            if (db === 'GTR') {
+                url = `https://uts.nlm.nih.gov/uts/umls/concept/${code}`;
+            } else if (db === 'NCBI Gene') {
+                url = `https://www.ncbi.nlm.nih.gov/gene/${code}`;
+            } else {
+                const sab = sabMap[db] || db;
+                url = `https://uts.nlm.nih.gov/uts/umls/vocabulary/${encodeURIComponent(sab)}/${encodeURIComponent(code)}`;
+            }
+
+            return `<li>${db}: <a href="${url}" target="_blank">${code}</a></li>`;
+        }).join('')}</ul>`;
+    }
+    </script>
+
+</body>
+</html>
